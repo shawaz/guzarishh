@@ -1,26 +1,105 @@
-# Next.js starter kit with Appwrite
+🛍️ Guzarishh – Fashion E-Commerce Platform
 
-Kickstart your Next.js development with this ready-to-use starter project integrated with [Appwrite](https://www.appwrite.io)
+Guzarishh is a UAE-based fashion e-commerce platform built by Codelude Software Development Firm.
+The platform is launching in two phases:
 
-## 🚀Getting started
+Next.js (Web App) powered by Appwrite backend
 
-###
-Clone the Project
-Clone this repository to your local machine using Git:
+Flutter (Mobile Apps) for Android & iOS
 
-`git clone https://github.com/appwrite/starter-for-nextjs`
+✨ Features
 
-## 🛠️ Development guid
-1. **Configure Appwrite**<br/>
-   Navigate to `.env` and update the values to match your Appwrite project credentials.
-2. **Customize as needed**<br/>
-   Modify the starter kit to suit your app's requirements. Adjust UI, features, or backend
-   integrations as per your needs.
-3. **Install dependencies**<br/>
-   Run `npm install` to install all dependencies.
-4. **Run the app**<br/>
-   Start the project by running `npm run dev`.
+🏷️ Product Management powered by Notion CMS (via Appwrite integration)
 
-## 💡 Additional notes
-- This starter project is designed to streamline your Next.js development with Appwrite.
-- Refer to the [Appwrite documentation](https://appwrite.io/docs) for detailed integration guidance.
+🌐 Next.js Web App – fast, SEO-friendly storefront
+
+📱 Flutter Mobile Apps (coming soon) for Android & iOS
+
+🔍 Browse products by categories & collections
+
+🛒 Cart & checkout flow
+
+💳 Payments: Stripe (MVP), with roadmap for Tabby, Tamara, Telr & Ziina
+
+📦 Order history & profile management
+
+☁️ Appwrite backend for authentication, database, storage
+
+🏗 Tech Stack
+Phase 1 – Web
+
+Frontend: Next.js 14 (App Router)
+
+Backend: Appwrite (Auth, Database, Functions, Storage)
+
+CMS: Notion API (Products, Categories, Banners)
+
+Payments: Stripe UAE (initial), Tabby/Tamara, Telr, Ziina (later)
+
+Phase 2 – Mobile
+
+Frontend: Flutter (Dart)
+
+Backend: Appwrite (shared with web)
+
+Payments: Shared integration layer
+
+🚀 Getting Started
+Prerequisites
+
+Node.js 20+
+
+Appwrite project setup (self-hosted or Cloud)
+
+Notion integration token + database IDs
+
+Stripe test keys
+
+Installation (Web – Next.js)
+# Clone repository
+git clone https://github.com/codelude/guzarishh.git
+cd guzarishh
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+⚙️ Project Structure (Web – Next.js)
+/src
+ ├── app/                 # Next.js App Router
+ │    ├── page.tsx        # Home
+ │    ├── product/[id]/   # Product detail
+ │    ├── cart/           # Cart & checkout
+ │    ├── profile/        # User profile & orders
+ │    └── api/            # API routes (Appwrite)
+ ├── components/          # UI components
+ ├── lib/                 # Utils (Appwrite client, Notion service)
+ └── styles/              # Global styles
+
+🗂 Notion CMS Schema
+
+Products → name, description, price, stock, images[], category, slug
+
+Categories → name, banner, slug
+
+Orders → order_id, user_id, items[], total_price, status
+
+📅 Roadmap
+
+✅ Phase 1 (Web) – Next.js + Appwrite + Stripe MVP (browse, cart, checkout)
+
+🔜 Phase 2 (Mobile) – Flutter apps (iOS + Android) using Appwrite backend
+
+🔜 Add BNPL support (Tabby, Tamara)
+
+🔜 Add local gateways (Telr, Ziina)
+
+🔜 Advanced features: wishlist, coupons, wallet, fashion blog (Notion sync)
+
+👨‍💻 Team
+
+Business: Guzarishh (UAE)
+
+Tech & Development: Codelude Software Development Firm
