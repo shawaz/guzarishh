@@ -1,311 +1,584 @@
 "use client";
 
 import "./app.css";
-import "@appwrite.io/pink-icons";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { client } from "@/lib/appwrite";
-import { AppwriteException } from "appwrite";
-import NextjsLogo from "../static/nextjs-icon.svg";
-import AppwriteLogo from "../static/appwrite-icon.svg";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { ShoppingBagIcon, HeartIcon, UserIcon, MagnifyingGlassIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
+import { HeartIcon as HeartSolidIcon } from "@heroicons/react/24/solid";
 import Image from "next/image";
+import Link from "next/link";
+import { getProducts, getCategories } from "@/lib/database";
+import { formatCurrency, getImageUrl } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCart } from "@/contexts/CartContext";
+import { useAdmin } from "@/contexts/AdminContext";
+import LoginModal from "@/components/auth/LoginModal";
+import RegisterModal from "@/components/auth/RegisterModal";
+import CartSheet from "@/components/CartSheet";
+import toast from "react-hot-toast";
 
 export default function Home() {
-  const [detailHeight, setDetailHeight] = useState(55);
-  const [logs, setLogs] = useState([]);
-  const [status, setStatus] = useState("idle");
-  const [showLogs, setShowLogs] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [wishlist, setWishlist] = useState([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showCartSheet, setShowCartSheet] = useState(false);
 
-  const detailsRef = useRef(null);
+  const { user, logout } = useAuth();
+  const { getCartCount, addItem } = useCart();
+  const { isAdmin, loading: adminLoading } = useAdmin();
 
-  const updateHeight = useCallback(() => {
-    if (detailsRef.current) {
-      setDetailHeight(detailsRef.current.clientHeight);
-    }
-  }, [logs, showLogs]);
+  // Debug logging
+  useEffect(() => {
+    console.log('Homepage - User:', user);
+    console.log('Homepage - Is Admin:', isAdmin);
+    console.log('Homepage - Admin Loading:', adminLoading);
+  }, [user, isAdmin, adminLoading]);
 
   useEffect(() => {
-    updateHeight();
-    window.addEventListener("resize", updateHeight);
-    return () => window.removeEventListener("resize", updateHeight);
-  }, [updateHeight]);
-
-  useEffect(() => {
-    if (!detailsRef.current) return;
-    detailsRef.current.addEventListener("toggle", updateHeight);
-
-    return () => {
-      if (!detailsRef.current) return;
-      detailsRef.current.removeEventListener("toggle", updateHeight);
-    };
+    loadInitialData();
   }, []);
 
-  async function sendPing() {
-    if (status === "loading") return;
-    setStatus("loading");
+  const loadInitialData = async () => {
     try {
-      const result = await client.ping();
-      const log = {
-        date: new Date(),
-        method: "GET",
-        path: "/v1/ping",
-        status: 200,
-        response: JSON.stringify(result),
-      };
-      setLogs((prevLogs) => [log, ...prevLogs]);
-      setStatus("success");
-    } catch (err) {
-      const log = {
-        date: new Date(),
-        method: "GET",
-        path: "/v1/ping",
-        status: err instanceof AppwriteException ? err.code : 500,
-        response:
-          err instanceof AppwriteException
-            ? err.message
-            : "Something went wrong",
-      };
-      setLogs((prevLogs) => [log, ...prevLogs]);
-      setStatus("error");
+      setLoading(true);
+
+      // Load categories and products
+      const [categoriesResponse, productsResponse] = await Promise.all([
+        getCategories(),
+        getProducts(12) // Load first 12 products
+      ]);
+
+      setCategories(categoriesResponse.documents || []);
+      setProducts(productsResponse.documents || []);
+
+      // Set featured products (first 6)
+      setFeaturedProducts(productsResponse.documents?.slice(0, 6) || []);
+
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load products');
+    } finally {
+      setLoading(false);
     }
-    setShowLogs(true);
-  }
+  };
+
+  const toggleWishlist = (productId) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    setWishlist(prev => {
+      const newWishlist = prev.includes(productId)
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId];
+
+      // Save to localStorage
+      localStorage.setItem(`wishlist_${user.$id}`, JSON.stringify(newWishlist));
+
+      if (prev.includes(productId)) {
+        toast.success('Removed from wishlist');
+      } else {
+        toast.success('Added to wishlist');
+      }
+
+      return newWishlist;
+    });
+  };
+
+  const handleAddToCart = async (productId) => {
+    try {
+      await addItem(productId, 1);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    }
+  };
+
+  const handleAuthClick = () => {
+    if (user) {
+      logout();
+    } else {
+      setShowLoginModal(true);
+    }
+  };
+
+  // Close modals when user logs in and load wishlist
+  useEffect(() => {
+    if (user) {
+      setShowLoginModal(false);
+      setShowRegisterModal(false);
+
+      // Load user's wishlist from localStorage
+      const savedWishlist = localStorage.getItem(`wishlist_${user.$id}`);
+      if (savedWishlist) {
+        setWishlist(JSON.parse(savedWishlist));
+      }
+    } else {
+      setWishlist([]);
+    }
+  }, [user]);
 
   return (
-    <main
-      className="checker-background flex flex-col items-center p-5"
-      style={{ marginBottom: `${detailHeight}px` }}
-    >
-      <div className="mt-25 flex w-full max-w-[40em] items-center justify-center lg:mt-34">
-        <div className="rounded-[25%] border border-[#19191C0A] bg-[#F9F9FA] p-3 shadow-[0px_9.36px_9.36px_0px_hsla(0,0%,0%,0.04)]">
-          <div className="rounded-[25%] border border-[#FAFAFB] bg-white p-5 shadow-[0px_2px_12px_0px_hsla(0,0%,0%,0.03)] lg:p-9">
-            <Image
-              alt={"Next.js logo"}
-              src={NextjsLogo}
-              width={56}
-              height={56}
-            />
-          </div>
-        </div>
-        <div
-          className={`flex w-38 items-center transition-opacity duration-2500 ${status === "success" ? "opacity-100" : "opacity-0"}`}
-        >
-          <div className="to-[rgba(253, 54, 110, 0.15)] h-[1px] flex-1 bg-gradient-to-l from-[#f02e65]"></div>
-          <div className="icon-check flex h-5 w-5 items-center justify-center rounded-full border border-[#FD366E52] bg-[#FD366E14] text-[#FD366E]"></div>
-          <div className="to-[rgba(253, 54, 110, 0.15)] h-[1px] flex-1 bg-gradient-to-r from-[#f02e65]"></div>
-        </div>
-        <div className="rounded-[25%] border border-[#19191C0A] bg-[#F9F9FA] p-3 shadow-[0px_9.36px_9.36px_0px_hsla(0,0%,0%,0.04)]">
-          <div className="rounded-[25%] border border-[#FAFAFB] bg-white p-5 shadow-[0px_2px_12px_0px_hsla(0,0%,0%,0.03)] lg:p-9">
-            <Image
-              alt={"Appwrite logo"}
-              src={AppwriteLogo}
-              width={56}
-              height={56}
-            />
-          </div>
-        </div>
-      </div>
-
-      <section className="mt-12 flex h-52 flex-col items-center">
-        {status === "loading" ? (
-          <div className="flex flex-row gap-4">
-            <div role="status">
-              <svg
-                aria-hidden="true"
-                className="h-5 w-5 animate-spin fill-[#FD366E] text-gray-200 dark:text-gray-600"
-                viewBox="0 0 100 101"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
-                  fill="currentColor"
-                />
-                <path
-                  d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
-                  fill="currentFill"
-                />
-              </svg>
-              <span className="sr-only">Loading...</span>
+    <div className="min-h-screen">
+      {/* Header */}
+      <header className="bg-white/95 backdrop-blur-sm shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo */}
+            <div className="flex-shrink-0">
+              <Link href="/" className="flex items-center">
+                <h1 className="text-2xl font-bold font-[Playfair_Display] text-rose-600">
+                  गुज़ारिश
+                </h1>
+                <span className="ml-2 text-sm text-gray-500 hidden sm:block">Guzarishh</span>
+              </Link>
             </div>
-            <span>Waiting for connection...</span>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex space-x-8">
+              <Link href="/collections" className="text-gray-700 hover:text-rose-600 transition-colors">
+                Collections
+              </Link>
+              <Link href="/sarees" className="text-gray-700 hover:text-rose-600 transition-colors">
+                Sarees
+              </Link>
+              <Link href="/lehengas" className="text-gray-700 hover:text-rose-600 transition-colors">
+                Lehengas
+              </Link>
+              <Link href="/suits" className="text-gray-700 hover:text-rose-600 transition-colors">
+                Suits
+              </Link>
+              <Link href="/accessories" className="text-gray-700 hover:text-rose-600 transition-colors">
+                Accessories
+              </Link>
+            </nav>
+
+            {/* Search Bar */}
+            <div className="hidden lg:flex flex-1 max-w-md mx-8">
+              <div className="relative w-full">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search for sarees, lehengas..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Right Icons */}
+            <div className="flex items-center space-x-4">
+              {user && (
+                <Link
+                  href="/admin-test"
+                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full hover:bg-blue-700 transition-colors"
+                >
+                  Debug
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="text-sm bg-rose-600 text-white px-3 py-1 rounded-full hover:bg-rose-700 transition-colors"
+                >
+                  Admin
+                </Link>
+              )}
+              {user ? (
+                <Link
+                  href="/account"
+                  className="p-2 text-gray-700 hover:text-rose-600 transition-colors"
+                  title={`Account - ${user.name}`}
+                >
+                  <UserIcon className="h-6 w-6" />
+                </Link>
+              ) : (
+                <button
+                  onClick={handleAuthClick}
+                  className="p-2 text-gray-700 hover:text-rose-600 transition-colors"
+                  title="Login"
+                >
+                  <UserIcon className="h-6 w-6" />
+                </button>
+              )}
+              <button className="p-2 text-gray-700 hover:text-rose-600 transition-colors relative">
+                <HeartIcon className="h-6 w-6" />
+                {wishlist.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {wishlist.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowCartSheet(true)}
+                className="p-2 text-gray-700 hover:text-rose-600 transition-colors relative"
+              >
+                <ShoppingBagIcon className="h-6 w-6" />
+                {getCartCount() > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {getCartCount()}
+                  </span>
+                )}
+              </button>
+
+              {/* Mobile menu button */}
+              <button
+                className="md:hidden p-2 text-gray-700"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <XMarkIcon className="h-6 w-6" />
+                ) : (
+                  <Bars3Icon className="h-6 w-6" />
+                )}
+              </button>
+            </div>
           </div>
-        ) : status === "success" ? (
-          <h1 className="font-[Poppins] text-2xl font-light text-[#2D2D31]">
-            Congratulations!
-          </h1>
-        ) : (
-          <h1 className="font-[Poppins] text-2xl font-light text-[#2D2D31]">
-            Check connection
-          </h1>
+        </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-white border-t">
+            <div className="px-4 py-2 space-y-2">
+              <Link href="/collections" className="block py-2 text-gray-700">Collections</Link>
+              <Link href="/sarees" className="block py-2 text-gray-700">Sarees</Link>
+              <Link href="/lehengas" className="block py-2 text-gray-700">Lehengas</Link>
+              <Link href="/suits" className="block py-2 text-gray-700">Suits</Link>
+              <Link href="/accessories" className="block py-2 text-gray-700">Accessories</Link>
+            </div>
+          </div>
         )}
+      </header>
 
-        <p className="mt-2 mb-8">
-          {status === "success" ? (
-            <span>You connected your app successfully.</span>
-          ) : status === "error" || status === "idle" ? (
-            <span>Send a ping to verify the connection</span>
-          ) : null}
-        </p>
+      {/* Hero Section */}
+      <section className="relative bg-gradient-to-r from-rose-100 via-pink-50 to-orange-50 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8 }}
+              className="text-center lg:text-left"
+            >
+              <h1 className="text-4xl md:text-6xl font-bold font-[Playfair_Display] text-gray-900 mb-6">
+                Exquisite
+                <span className="text-rose-600 block">Indian Fashion</span>
+              </h1>
+              <p className="text-lg text-gray-600 mb-8 max-w-lg">
+                Discover the finest collection of traditional Indian women's clothing.
+                From elegant sarees to stunning lehengas, find your perfect ethnic ensemble.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                <Link
+                  href="/collections"
+                  className="bg-rose-600 text-white px-8 py-3 rounded-full hover:bg-rose-700 transition-colors font-medium"
+                >
+                  Shop Collection
+                </Link>
+                <Link
+                  href="/about"
+                  className="border border-rose-600 text-rose-600 px-8 py-3 rounded-full hover:bg-rose-50 transition-colors font-medium"
+                >
+                  Our Story
+                </Link>
+              </div>
+            </motion.div>
 
-        <button
-          onClick={sendPing}
-          className={`cursor-pointer rounded-md bg-[#FD366E] px-2.5 py-1.5 ${status === "loading" ? "hidden" : "visible"}`}
-        >
-          <span className="text-white">Send a ping</span>
-        </button>
+            <motion.div
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="relative"
+            >
+              <div className="relative h-96 lg:h-[500px] rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/hero-image.jpg"
+                  alt="Beautiful Indian woman in traditional saree"
+                  fill
+                  className="object-cover"
+                  priority
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+              </div>
+
+              {/* Floating elements */}
+              <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="absolute -top-4 -right-4 bg-white p-4 rounded-full shadow-lg"
+              >
+                <HeartSolidIcon className="h-6 w-6 text-rose-500" />
+              </motion.div>
+
+              <motion.div
+                animate={{ y: [0, 10, 0] }}
+                transition={{ duration: 3, repeat: Infinity, delay: 1.5 }}
+                className="absolute -bottom-4 -left-4 bg-white p-4 rounded-full shadow-lg"
+              >
+                <span className="text-2xl">✨</span>
+              </motion.div>
+            </motion.div>
+          </div>
+        </div>
       </section>
 
-      <div className="grid grid-rows-3 gap-7 lg:grid-cols-3 lg:grid-rows-none">
-        <div className="flex h-full w-72 flex-col gap-2 rounded-md border border-[#EDEDF0] bg-white p-4">
-          <h2 className="text-xl font-light text-[#2D2D31]">Edit your app</h2>
-          <p>
-            Edit{" "}
-            <code className="rounded-sm bg-[#EDEDF0] p-1">app/page.js</code> to
-            get started with building your app.
-          </p>
+      {/* Categories Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold font-[Playfair_Display] text-gray-900 mb-4">
+              Shop by Category
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Explore our curated collection of traditional Indian wear
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[
+              { name: 'Sarees', image: '/category-sarees.jpg', href: '/sarees' },
+              { name: 'Lehengas', image: '/category-lehengas.jpg', href: '/lehengas' },
+              { name: 'Suits', image: '/category-suits.jpg', href: '/suits' },
+              { name: 'Accessories', image: '/category-accessories.jpg', href: '/accessories' }
+            ].map((category, index) => (
+              <motion.div
+                key={category.name}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="group cursor-pointer"
+              >
+                <Link href={category.href}>
+                  <div className="relative h-48 rounded-lg overflow-hidden mb-4">
+                    <Image
+                      src={category.image}
+                      alt={category.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors"></div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-center text-gray-900 group-hover:text-rose-600 transition-colors">
+                    {category.name}
+                  </h3>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
         </div>
-        <a
-          href="https://cloud.appwrite.io"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <div className="flex h-full w-72 flex-col gap-2 rounded-md border border-[#EDEDF0] bg-white p-4">
-            <div className="flex flex-row items-center justify-between">
-              <h2 className="text-xl font-light text-[#2D2D31]">
-                Go to console
-              </h2>
-              <span className="icon-arrow-right text-[#D8D8DB]"></span>
-            </div>
-            <p>
-              Navigate to the console to control and oversee the Appwrite
-              services.
+      </section>
+
+      {/* Featured Products */}
+      <section className="py-16 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold font-[Playfair_Display] text-gray-900 mb-4">
+              Featured Collection
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Handpicked pieces that celebrate the beauty of Indian craftsmanship
             </p>
           </div>
-        </a>
 
-        <a
-          href="https://appwrite.io/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <div className="flex h-full w-72 flex-col gap-2 rounded-md border border-[#EDEDF0] bg-white p-4">
-            <div className="flex flex-row items-center justify-between">
-              <h2 className="text-xl font-light text-[#2D2D31]">
-                Explore docs
-              </h2>
-              <span className="icon-arrow-right text-[#D8D8DB]"></span>
-            </div>
-            <p>
-              Discover the full power of Appwrite by diving into our
-              documentation.
-            </p>
-          </div>
-        </a>
-      </div>
-
-      <aside className="fixed bottom-0 flex w-full cursor-pointer border-t border-[#EDEDF0] bg-white">
-        <details open={showLogs} ref={detailsRef} className={"w-full"}>
-          <summary className="flex w-full flex-row justify-between p-4 marker:content-none">
-            <div className="flex gap-2">
-              <span className="font-semibold">Logs</span>
-              {logs.length > 0 && (
-                <div className="flex items-center rounded-md bg-[#E6E6E6] px-2">
-                  <span className="font-semibold">{logs.length}</span>
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+                  <div className="h-64 bg-gray-300"></div>
+                  <div className="p-4">
+                    <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-            <div className="icon">
-              <span className="icon-cheveron-down" aria-hidden="true"></span>
-            </div>
-          </summary>
-          <div className="flex w-full flex-col lg:flex-row">
-            <div className="flex flex-col border-r border-[#EDEDF0]">
-              <div className="border-y border-[#EDEDF0] bg-[#FAFAFB] px-4 py-2 text-[#97979B]">
-                Project
-              </div>
-              <div className="grid grid-cols-2 gap-4 p-4">
-                <div className="flex flex-col">
-                  <span className="text-[#97979B]">Endpoint</span>
-                  <span className="truncate">
-                    {process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[#97979B]">Project-ID</span>
-                  <span className="truncate">
-                    {process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[#97979B]">Project name</span>
-                  <span className="truncate">
-                    {process.env.NEXT_PUBLIC_APPWRITE_PROJECT_NAME}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex-grow">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-y border-[#EDEDF0] bg-[#FAFAFB] text-[#97979B]">
-                    {logs.length > 0 ? (
-                      <>
-                        <td className="w-52 py-2 pl-4">Date</td>
-                        <td>Status</td>
-                        <td>Method</td>
-                        <td className="hidden lg:table-cell">Path</td>
-                        <td className="hidden lg:table-cell">Response</td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="py-2 pl-4">Logs</td>
-                      </>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredProducts.map((product, index) => (
+                <motion.div
+                  key={product.$id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className="bg-white rounded-lg shadow-md overflow-hidden group hover:shadow-xl transition-shadow"
+                >
+                  <div className="relative h-64 overflow-hidden">
+                    <Image
+                      src={getImageUrl(product.images?.[0]) || '/placeholder-product.jpg'}
+                      alt={product.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <button
+                      onClick={() => toggleWishlist(product.$id)}
+                      className="absolute top-4 right-4 p-2 bg-white/80 rounded-full hover:bg-white transition-colors"
+                    >
+                      {wishlist.includes(product.$id) ? (
+                        <HeartSolidIcon className="h-5 w-5 text-rose-500" />
+                      ) : (
+                        <HeartIcon className="h-5 w-5 text-gray-600" />
+                      )}
+                    </button>
+                    {product.salePrice && (
+                      <div className="absolute top-4 left-4 bg-rose-500 text-white px-2 py-1 rounded text-sm font-medium">
+                        Sale
+                      </div>
                     )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.length > 0 ? (
-                    logs.map((log, index) => (
-                      <tr key={`log-${index}-${log.date.getTime()}`}>
-                        <td className="py-2 pl-4 font-[Fira_Code]">
-                          {log.date.toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td>
-                          {log.status > 400 ? (
-                            <div className="w-fit rounded-sm bg-[#FF453A3D] px-1 text-[#B31212]">
-                              {log.status}
-                            </div>
-                          ) : (
-                            <div className="w-fit rounded-sm bg-[#10B9813D] px-1 text-[#0A714F]">
-                              {log.status}
-                            </div>
-                          )}
-                        </td>
-                        <td>{log.method}</td>
-                        <td className="hidden lg:table-cell">{log.path}</td>
-                        <td className="hidden font-[Fira_Code] lg:table-cell">
-                          {log.response}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr key="no-logs">
-                      <td className="py-2 pl-4 font-[Fira_Code]">
-                        There are no logs to show
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </div>
+
+                  <div className="p-4">
+                    <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                      {product.name}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                      {product.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {product.salePrice ? (
+                          <>
+                            <span className="text-lg font-bold text-rose-600">
+                              {formatCurrency(product.salePrice)}
+                            </span>
+                            <span className="text-sm text-gray-500 line-through">
+                              {formatCurrency(product.price)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-lg font-bold text-gray-900">
+                            {formatCurrency(product.price)}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleAddToCart(product.$id)}
+                        className="bg-rose-600 text-white px-4 py-2 rounded-full text-sm hover:bg-rose-700 transition-colors"
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          <div className="text-center mt-12">
+            <Link
+              href="/collections"
+              className="inline-block bg-rose-600 text-white px-8 py-3 rounded-full hover:bg-rose-700 transition-colors font-medium"
+            >
+              View All Products
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Newsletter Section */}
+      <section className="py-16 bg-rose-600">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl font-bold font-[Playfair_Display] text-white mb-4">
+            Stay Updated with Latest Collections
+          </h2>
+          <p className="text-rose-100 mb-8 max-w-2xl mx-auto">
+            Be the first to know about new arrivals, exclusive offers, and fashion tips
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+            <input
+              type="email"
+              placeholder="Enter your email"
+              className="flex-1 px-4 py-3 rounded-full border-0 focus:outline-none focus:ring-2 focus:ring-white"
+            />
+            <button className="bg-white text-rose-600 px-8 py-3 rounded-full font-medium hover:bg-gray-100 transition-colors">
+              Subscribe
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="text-2xl font-bold font-[Playfair_Display] text-rose-400 mb-4">
+                गुज़ारिश
+              </h3>
+              <p className="text-gray-400 mb-4">
+                Celebrating the timeless beauty of Indian fashion with modern elegance.
+              </p>
+              <div className="flex space-x-4">
+                <a href="#" className="text-gray-400 hover:text-white transition-colors">Facebook</a>
+                <a href="#" className="text-gray-400 hover:text-white transition-colors">Instagram</a>
+                <a href="#" className="text-gray-400 hover:text-white transition-colors">Pinterest</a>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Shop</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link href="/sarees" className="hover:text-white transition-colors">Sarees</Link></li>
+                <li><Link href="/lehengas" className="hover:text-white transition-colors">Lehengas</Link></li>
+                <li><Link href="/suits" className="hover:text-white transition-colors">Suits</Link></li>
+                <li><Link href="/accessories" className="hover:text-white transition-colors">Accessories</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Customer Care</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link href="/contact" className="hover:text-white transition-colors">Contact Us</Link></li>
+                <li><Link href="/shipping" className="hover:text-white transition-colors">Shipping Info</Link></li>
+                <li><Link href="/returns" className="hover:text-white transition-colors">Returns</Link></li>
+                <li><Link href="/size-guide" className="hover:text-white transition-colors">Size Guide</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">About</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li><Link href="/about" className="hover:text-white transition-colors">Our Story</Link></li>
+                <li><Link href="/blog" className="hover:text-white transition-colors">Blog</Link></li>
+                <li><Link href="/careers" className="hover:text-white transition-colors">Careers</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              </ul>
             </div>
           </div>
-        </details>
-      </aside>
-    </main>
+
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+            <p>&copy; 2024 Guzarishh. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Authentication Modals */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSwitchToRegister={() => {
+          setShowLoginModal(false);
+          setShowRegisterModal(true);
+        }}
+      />
+
+      <RegisterModal
+        isOpen={showRegisterModal}
+        onClose={() => setShowRegisterModal(false)}
+        onSwitchToLogin={() => {
+          setShowRegisterModal(false);
+          setShowLoginModal(true);
+        }}
+      />
+
+      {/* Cart Sheet */}
+      <CartSheet
+        isOpen={showCartSheet}
+        onClose={() => setShowCartSheet(false)}
+      />
+    </div>
   );
 }
